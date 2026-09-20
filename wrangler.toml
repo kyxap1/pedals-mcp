@@ -2,10 +2,24 @@ name = "pedals-mcp"
 main = "src/index.js"
 compatibility_date = "2026-09-20"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
 
-# No [[routes]] block on purpose. pedals-mcp.kyxap.pro is attached to this
-# Worker as a Custom Domain in the dashboard; declaring it here would make the
-# deploy need zone permissions on kyxap.pro, which the CI token must not have.
+# A deploy overwrites the Worker's remote configuration with this file, so the
+# Custom Domain has to be declared here: leaving it out detaches
+# pedals-mcp.kyxap.pro from the Worker.
+[[routes]]
+pattern = "pedals-mcp.kyxap.pro"
+zone_name = "kyxap.pro"
+custom_domain = true
+enabled = true
+previews_enabled = false
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
 
 [[d1_databases]]
 binding = "DB"
