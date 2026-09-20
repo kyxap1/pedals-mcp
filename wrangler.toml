@@ -2,7 +2,10 @@ name = "pedals-mcp"
 main = "src/index.js"
 compatibility_date = "2026-09-20"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = true
+# Both off so a deploy needs nothing account-wide: resolving the workers.dev
+# subdomain is an account-level read, and the CI token is scoped to this Worker.
+# pedals-mcp.kyxap.pro is the only entrance.
+workers_dev = false
 preview_urls = false
 
 # A deploy overwrites the Worker's remote configuration with this file, so the
