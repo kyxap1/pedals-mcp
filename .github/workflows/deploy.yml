@@ -1,0 +1,35 @@
+name: Deploy
+
+# Worker code only. Reloading the data is a different event with a different
+# trigger, so it lives in rebuild.yml: a failure here must not stop a reload,
+# and a reload must not wait on a deploy.
+on:
+  push:
+    branches: [master]
+    paths:
+      - src/**
+      - schema.mjs
+      - wrangler.toml
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Uploads the script and writes this Worker's own subdomain settings;
+      # both are in reach of a token scoped to this Worker alone. It prints
+      # "No targets deployed" because no route is declared — see wrangler.toml.
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

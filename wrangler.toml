@@ -8,15 +8,10 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 preview_urls = false
 
-# A deploy overwrites the Worker's remote configuration with this file, so the
-# Custom Domain has to be declared here: leaving it out detaches
-# pedals-mcp.kyxap.pro from the Worker.
-[[routes]]
-pattern = "pedals-mcp.kyxap.pro"
-zone_name = "kyxap.pro"
-custom_domain = true
-enabled = true
-previews_enabled = false
+# The Custom Domain is attached once, by hand, and deliberately not declared
+# here: wrangler only touches the domains API for routes this file lists, so an
+# undeclared one is left alone. Declaring it would make every deploy re-assert
+# the DNS record, which needs zone access the CI token does not have.
 
 [observability]
 enabled = true
