@@ -1,11 +1,13 @@
 name: Rebuild
 
+# Data only; the Worker is deployed by deploy.yml. Nothing here holds a
+# Cloudflare credential — the rows go to the Worker's /load route over HTTPS.
+#
 # The manuals change at most once a day and a full rebuild writes ~1355 rows,
-# so the D1 free quota (100K writes/day) allows ~73 of these. Trigger, not cron.
+# so the D1 free quota (100K writes/day) allows ~73 of these. Trigger, not cron:
+# kyxap1/pedals dispatches this when a manual changes.
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
 
 jobs:
   rebuild:
@@ -30,13 +32,15 @@ jobs:
         env:
           PEDALS_ROOT: manuals
 
-      # Deploy before loading: the schema the Worker applies ships with it.
-      - uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
       - name: Load the manuals into D1
         env:
           MCP_URL: https://pedals-mcp.kyxap.pro
           DB_WRITE_TOKEN: ${{ secrets.DB_WRITE_TOKEN }}
         run: node load.mjs manuals
+
+      # A load is many requests, not one transaction, so the only proof it
+      # landed whole is querying it back through the tools.
+      - name: Check every tool against the loaded database
+        env:
+          MCP_URL: https://pedals-mcp.kyxap.pro
+        run: node e2e.mjs

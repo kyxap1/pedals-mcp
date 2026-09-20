@@ -32,16 +32,24 @@ The tests run against real manuals rather than checked-in fixtures, so they need
 
 ## Deployment
 
-A push to `kyxap1/pedals` that touches a manual dispatches the rebuild workflow
-here. It deploys the Worker, then runs `load.mjs`, which POSTs the rows to the
-Worker's `/load` route; the Worker writes them through its own D1 binding. A
-load starts by dropping every table, so the result never depends on what was
-there before.
+Code and data ship on separate triggers, so neither can block the other:
+
+- **`deploy.yml`** — a push here that touches `src/`, `schema.mjs`,
+  `wrangler.toml` or the lockfile runs `wrangler deploy`.
+- **`rebuild.yml`** — `workflow_dispatch` only; `kyxap1/pedals` fires it when a
+  manual changes. It runs `load.mjs`, which POSTs the rows to the Worker's
+  `/load` route, then `e2e.mjs` against the result. A load starts by dropping
+  every table, so it never depends on what was there before.
 
 Data travels as values rather than as a SQL file run by `wrangler d1 execute`
 so that **CI never holds a D1 credential**. D1 API tokens cannot be scoped to a
 single database, so one would reach every database in the account; the Worker's
 binding reaches this one and nothing else.
+
+`pedals-mcp.kyxap.pro` is attached to the Worker by hand and is not declared in
+`wrangler.toml`; see the comment there. Changing the schema needs both
+workflows: deploy first, then dispatch a rebuild, because the DDL a load
+applies is the one that shipped with the deployed Worker.
 
 Secrets:
 
