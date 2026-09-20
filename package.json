@@ -1,0 +1,13 @@
+{
+  "name": "pedals-mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build-db.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "turndown": "^7.2.0"
+  }
+}
