@@ -4,10 +4,17 @@
   "type": "module",
   "scripts": {
     "build": "node build-db.mjs",
-    "test": "node --test"
+    "test": "node --test build-db.test.mjs",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "^0.24.0",
     "cheerio": "^1.0.0",
-    "turndown": "^7.2.0"
+    "turndown": "^7.2.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
   }
 }

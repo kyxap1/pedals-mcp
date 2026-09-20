@@ -1,0 +1,13 @@
+name = "pedals-mcp"
+main = "src/index.js"
+compatibility_date = "2026-09-20"
+compatibility_flags = ["nodejs_compat"]
+
+# No [[routes]] block on purpose. pedals-mcp.kyxap.pro is attached to this
+# Worker as a Custom Domain in the dashboard; declaring it here would make the
+# deploy need zone permissions on kyxap.pro, which the CI token must not have.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pedals-mcp"
+database_id = "e265b985-858a-4c62-893a-feb1a5b47112"

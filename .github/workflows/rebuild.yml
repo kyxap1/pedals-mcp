@@ -3,11 +3,9 @@ name: Rebuild
 # The manuals change at most once a day and a full rebuild writes ~1355 rows,
 # so the D1 free quota (100K writes/day) allows ~73 of these. Trigger, not cron.
 on:
-  repository_dispatch:
-    types: [manuals-changed]
+  workflow_dispatch:
   push:
     branches: [master]
-  workflow_dispatch:
 
 jobs:
   rebuild:
@@ -32,9 +30,13 @@ jobs:
         env:
           PEDALS_ROOT: manuals
 
-      - run: node build-db.mjs manuals dist/pedals.sql
-
+      # Deploy before loading: the schema the Worker applies ships with it.
       - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: d1 execute pedals --remote --yes --file dist/pedals.sql
+
+      - name: Load the manuals into D1
+        env:
+          MCP_URL: https://pedals-mcp.kyxap.pro
+          DB_WRITE_TOKEN: ${{ secrets.DB_WRITE_TOKEN }}
+        run: node load.mjs manuals

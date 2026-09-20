@@ -9,8 +9,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
+import { DDL, COLUMNS, FTS_REBUILD, SITE } from './schema.mjs';
 
-export const SITE = 'https://pedals.kyxap.pro';
+export { SITE };
 export const PART_CHARS = 3000; // split target, measured on render
 export const BIG_TABLE_ROWS = 25; // above this, render stubs the table
 export const BIG_TABLE_CHARS = 2000; // …and so does a short table with long cells
@@ -405,45 +406,6 @@ export function buildRows(page) {
 const q = (v) =>
   v === null || v === undefined ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`;
 
-const DDL = `
-DROP TABLE IF EXISTS section_fts;
-DROP TABLE IF EXISTS tbl;
-DROP TABLE IF EXISTS section;
-DROP TABLE IF EXISTS pedal;
-
-CREATE TABLE pedal (
-  slug  TEXT PRIMARY KEY,
-  name  TEXT,
-  brand TEXT, model TEXT, type TEXT,
-  url   TEXT,
-  specs TEXT
-);
-
-CREATE TABLE section (
-  id     INTEGER PRIMARY KEY,
-  slug   TEXT, anchor TEXT,
-  title  TEXT, level INT, ord INT,
-  part   INT DEFAULT 1,
-  chars  INT,
-  body   TEXT,
-  render TEXT
-);
-
-CREATE TABLE tbl (
-  id INTEGER PRIMARY KEY,
-  slug TEXT, section_id INT, ord INT,
-  caption TEXT,
-  data TEXT
-);
-
-CREATE INDEX section_slug ON section(slug, anchor, part);
-CREATE INDEX tbl_section ON tbl(section_id);
-
-CREATE VIRTUAL TABLE section_fts USING fts5(
-  title, body, content='section', content_rowid='id'
-);
-`.trim();
-
 function batched(table, columns, tuples) {
   const out = [];
   let buf = [];
@@ -463,59 +425,49 @@ function batched(table, columns, tuples) {
   return out;
 }
 
-export function toSql(pages) {
-  const out = [DDL];
-  const pedals = [];
-  const sections = [];
-  const tables = [];
+// The rows themselves, before anything decides how to transport them: the
+// local dump renders them as SQL text, CI hands them to the Worker as values.
+export function tablesOf(pages) {
+  const pedal = [];
+  const section = [];
+  const tbl = [];
   let sectionOffset = 0;
 
   for (const page of pages) {
     const { sectionRows, tableRows } = buildRows(page);
-    pedals.push(
-      `(${[page.slug, page.name, null, null, null, `${SITE}/${page.slug}/`, null]
-        .map(q)
-        .join(', ')})`
-    );
+    pedal.push([page.slug, page.name, null, null, null, `${SITE}/${page.slug}/`, null]);
     for (const s of sectionRows)
-      sections.push(
-        `(${[
-          s.id + sectionOffset,
-          q(s.slug),
-          q(s.anchor),
-          q(s.title),
-          s.level,
-          s.ord,
-          s.part,
-          s.chars,
-          q(s.body),
-          q(s.render),
-        ].join(', ')})`
-      );
+      section.push([
+        s.id + sectionOffset,
+        s.slug,
+        s.anchor,
+        s.title,
+        s.level,
+        s.ord,
+        s.part,
+        s.chars,
+        s.body,
+        s.render,
+      ]);
     for (const t of tableRows)
-      tables.push(
-        `(${[q(t.slug), t.section_id + sectionOffset, t.ord, q(t.caption), q(t.data)].join(', ')})`
-      );
+      tbl.push([t.slug, t.section_id + sectionOffset, t.ord, t.caption, t.data]);
     sectionOffset += sectionRows.length;
   }
+  return { pedal, section, tbl };
+}
 
-  out.push(...batched('pedal', ['slug', 'name', 'brand', 'model', 'type', 'url', 'specs'], pedals));
-  out.push(
-    ...batched(
-      'section',
-      ['id', 'slug', 'anchor', 'title', 'level', 'ord', 'part', 'chars', 'body', 'render'],
-      sections
-    )
-  );
-  out.push(...batched('tbl', ['slug', 'section_id', 'ord', 'caption', 'data'], tables));
-  // External-content FTS stores no copy of the body and does not fill itself.
-  out.push(`INSERT INTO section_fts(section_fts) VALUES('rebuild');`);
+export function toSql(pages) {
+  const out = [DDL];
+  const tables = tablesOf(pages);
+  for (const [name, columns] of Object.entries(COLUMNS))
+    out.push(...batched(name, columns, tables[name].map((row) => `(${row.map(q).join(', ')})`)));
+  out.push(`${FTS_REBUILD};`);
   return out.join('\n\n') + '\n';
 }
 
 // -------------------------------------------------------------------- main
 
-async function findManuals(root) {
+export async function findManuals(root) {
   const out = [];
   for (const e of await readdir(root, { withFileTypes: true })) {
     if (!e.isDirectory() || e.name.startsWith('.') || e.name.startsWith('_')) continue;
