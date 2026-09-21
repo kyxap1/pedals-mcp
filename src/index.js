@@ -318,7 +318,7 @@ async function load(request, env) {
 async function limited(request, env) {
   const key = request.headers.get('cf-connecting-ip') || 'local';
   const { success } = await env.LIMITER.limit({ key });
-  return success ? null : new Response('rate limited', { status: 429, headers: { 'retry-after': '60' } });
+  return success ? null : new Response('rate limited', { status: 429, headers: { 'retry-after': '10' } });
 }
 
 export default {

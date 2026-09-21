@@ -5,8 +5,8 @@ Remote MCP server over the pedal manuals published at
 
 Agents ask it questions instead of loading whole manual files into context.
 
-Endpoint: `https://pedals-mcp.kyxap.pro/mcp` (Streamable HTTP, no auth; 60 requests per
-minute per client IP, then 429).
+Endpoint: `https://pedals-mcp.kyxap.pro/mcp` (Streamable HTTP, no auth; 20 requests per
+10 seconds per client IP, then 429).
 
 ## What is here
 
