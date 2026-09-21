@@ -5,7 +5,8 @@ Remote MCP server over the pedal manuals published at
 
 Agents ask it questions instead of loading whole manual files into context.
 
-Endpoint: `https://pedals-mcp.kyxap.pro/mcp` (Streamable HTTP, no auth).
+Endpoint: `https://pedals-mcp.kyxap.pro/mcp` (Streamable HTTP, no auth; 60 requests per
+minute per client IP, then 429).
 
 ## What is here
 
@@ -38,8 +39,10 @@ Code and data ship on separate triggers, so neither can block the other:
   `wrangler.toml` or the lockfile runs `wrangler deploy`.
 - **`rebuild.yml`** — `workflow_dispatch` only; `kyxap1/pedals` fires it when a
   manual changes. It runs `load.mjs`, which POSTs the rows to the Worker's
-  `/load` route, then `e2e.mjs` against the result. A load starts by dropping
-  every table, so it never depends on what was there before.
+  `/load` route, then `e2e.mjs` against the result. Rows fill `*_new` tables and
+  a final request swaps them in as one transaction, so the tools keep serving the
+  old data until then and a failed load leaves it untouched. The swap is refused
+  (409) unless every staged table holds the row count the loader reports.
 
 Data travels as values rather than as a SQL file run by `wrangler d1 execute`
 so that **CI never holds a D1 credential**. D1 API tokens cannot be scoped to a
@@ -47,9 +50,9 @@ single database, so one would reach every database in the account; the Worker's
 binding reaches this one and nothing else.
 
 `pedals-mcp.kyxap.pro` is attached to the Worker by hand and is not declared in
-`wrangler.toml`; see the comment there. Changing the schema needs both
-workflows: deploy first, then dispatch a rebuild, because the DDL a load
-applies is the one that shipped with the deployed Worker.
+`wrangler.toml`; see the comment there. The DDL a load applies is the one that
+shipped with the deployed Worker, so a push to `master` dispatches `rebuild.yml`
+once `deploy.yml` has gone live.
 
 Secrets:
 

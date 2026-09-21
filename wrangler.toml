@@ -19,6 +19,13 @@ enabled = true
 [observability.logs]
 enabled = true
 
+# Per client IP, on the MCP routes only. Generous for a handful of concurrent
+# sessions; it is there to stop a runaway client, not to meter normal use.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
 [[d1_databases]]
 binding = "DB"
 database_name = "pedals-mcp"

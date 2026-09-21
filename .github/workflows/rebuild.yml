@@ -9,6 +9,10 @@ name: Rebuild
 on:
   workflow_dispatch:
 
+# Two loads at once would share the *_new tables. A queued run waits its turn.
+concurrency:
+  group: rebuild
+
 jobs:
   rebuild:
     runs-on: ubuntu-latest

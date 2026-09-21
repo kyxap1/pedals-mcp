@@ -4,12 +4,7 @@
 // Where the manuals are published; every citation a tool returns points here.
 export const SITE = 'https://pedals.kyxap.pro';
 
-export const DDL = `
-DROP TABLE IF EXISTS section_fts;
-DROP TABLE IF EXISTS tbl;
-DROP TABLE IF EXISTS section;
-DROP TABLE IF EXISTS pedal;
-
+const TABLES = `
 CREATE TABLE pedal (
   slug  TEXT PRIMARY KEY,
   name  TEXT,
@@ -34,20 +29,53 @@ CREATE TABLE tbl (
   caption TEXT,
   data TEXT
 );
+`.trim();
 
+const INDEXES = `
 CREATE INDEX section_slug ON section(slug, anchor, part);
 CREATE INDEX tbl_section ON tbl(section_id);
+`.trim();
 
+const FTS = `
 CREATE VIRTUAL TABLE section_fts USING fts5(
   title, body, content='section', content_rowid='id'
 );
 `.trim();
 
-// The order the loader applies them in; a statement per array entry, because
-// D1 takes one statement per prepare() call.
-export const DDL_STATEMENTS = DDL.split(';\n')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const DROPS = `
+DROP TABLE IF EXISTS section_fts;
+DROP TABLE IF EXISTS tbl;
+DROP TABLE IF EXISTS section;
+DROP TABLE IF EXISTS pedal;
+`.trim();
+
+export const DDL = [DROPS, TABLES, INDEXES, FTS].join('\n\n');
+
+// D1 takes one statement per prepare() call; nothing above has a ';' inside.
+const statements = (sql) =>
+  sql
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const LIVE = ['pedal', 'section', 'tbl'];
+
+// A load fills `<table>_new` while the live tables keep serving.
+export const STAGE_STATEMENTS = [
+  ...LIVE.map((t) => `DROP TABLE IF EXISTS ${t}_new`),
+  ...statements(TABLES.replace(/CREATE TABLE (\w+)/g, 'CREATE TABLE $1_new')),
+];
+
+// Run as one batch, which D1 executes as a transaction: readers see the old
+// tables or the new ones. The FTS table is rebuilt here rather than renamed
+// because it names its content table.
+export const SWAP_STATEMENTS = [
+  ...statements(DROPS),
+  ...LIVE.map((t) => `ALTER TABLE ${t}_new RENAME TO ${t}`),
+  ...statements(INDEXES),
+  ...statements(FTS),
+  `INSERT INTO section_fts(section_fts) VALUES('rebuild')`,
+];
 
 export const COLUMNS = {
   pedal: ['slug', 'name', 'brand', 'model', 'type', 'url', 'specs'],

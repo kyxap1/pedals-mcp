@@ -7,7 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from 'agents/mcp/server';
 import { z } from 'zod';
-import { DDL_STATEMENTS, COLUMNS, FTS_REBUILD, SITE } from '../schema.mjs';
+import { STAGE_STATEMENTS, SWAP_STATEMENTS, COLUMNS, SITE } from '../schema.mjs';
 
 const SEARCH_LIMIT = 10;
 const TABLE_LIMIT = 30;
@@ -269,41 +269,68 @@ function sameToken(a, b) {
   return diff === 0;
 }
 
-// A load runs as many requests as CI needs to ship the rows, so it is not one
-// transaction. It does not have to be: every load starts by dropping the
-// tables, and a half-finished one is replaced wholesale by the next.
+const bad = (error) => Response.json({ error }, { status: 400 });
+
+// A load runs as many requests as CI needs to ship the rows. They fill
+// `<table>_new` and `finish` swaps them in as one transaction, so readers keep
+// the old data until then and a load that dies midway leaves it untouched. The
+// next `reset` discards whatever a failed one staged. `finish` swaps only when
+// every staged table holds the row count the loader says it sent.
 async function load(request, env) {
   const auth = request.headers.get('authorization') || '';
   if (!env.DB_WRITE_TOKEN || !sameToken(auth, `Bearer ${env.DB_WRITE_TOKEN}`))
     return Response.json({ error: 'unauthorized' }, { status: 401 });
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object') return bad('body must be a JSON object');
 
   if (body.reset) {
-    await env.DB.batch(DDL_STATEMENTS.map((s) => env.DB.prepare(s)));
+    await env.DB.batch(STAGE_STATEMENTS.map((s) => env.DB.prepare(s)));
     return Response.json({ ok: true, reset: true });
   }
 
   if (body.finish) {
-    await env.DB.prepare(FTS_REBUILD).run();
+    for (const table of Object.keys(COLUMNS)) {
+      const { n } = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}_new`).first();
+      if (n !== body.counts?.[table])
+        return Response.json(
+          { error: `${table}_new holds ${n} rows, expected ${body.counts?.[table]}` },
+          { status: 409 }
+        );
+    }
+    await env.DB.batch(SWAP_STATEMENTS.map((s) => env.DB.prepare(s)));
     return Response.json({ ok: true, finish: true });
   }
 
-  const columns = COLUMNS[body.table];
-  if (!columns) return Response.json({ error: 'unknown table' }, { status: 400 });
+  if (!Object.hasOwn(COLUMNS, body.table)) return bad('unknown table');
+  if (!Array.isArray(body.rows) || !body.rows.every(Array.isArray)) return bad('rows must be an array of arrays');
 
-  const sql = `INSERT INTO ${body.table} (${columns.join(', ')})
+  const columns = COLUMNS[body.table];
+  const sql = `INSERT INTO ${body.table}_new (${columns.join(', ')})
                VALUES (${columns.map(() => '?').join(', ')})`;
   const stmt = env.DB.prepare(sql);
   await env.DB.batch(body.rows.map((r) => stmt.bind(...r)));
   return Response.json({ ok: true, rows: body.rows.length });
 }
 
+// The binding counts per key across the colo; CF-Connecting-IP is set by the
+// edge, not the client. Without the header (local dev) everything shares a key.
+async function limited(request, env) {
+  const key = request.headers.get('cf-connecting-ip') || 'local';
+  const { success } = await env.LIMITER.limit({ key });
+  return success ? null : new Response('rate limited', { status: 429, headers: { 'retry-after': '60' } });
+}
+
 export default {
   fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
-    if (pathname === '/load' && request.method === 'POST') return load(request, env);
+    if (pathname === '/load')
+      return request.method === 'POST'
+        ? load(request, env)
+        : new Response('POST only', { status: 405, headers: { allow: 'POST' } });
     if (pathname === '/') return new Response(`MCP endpoint: ${new URL('/mcp', request.url)}\n`);
-    return createMcpHandler(() => createServer(env))(request, env, ctx);
+    return limited(request, env).then(
+      (blocked) => blocked || createMcpHandler(() => createServer(env))(request, env, ctx)
+    );
   },
 };

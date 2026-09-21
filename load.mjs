@@ -52,18 +52,22 @@ async function main() {
   for (const m of await findManuals(root))
     pages.push(parsePage(await readFile(m.file, 'utf8'), m.slug));
 
+  if (!pages.length) throw new Error(`no manuals under ${root}`);
+
   const tables = tablesOf(pages);
 
   await post(url, token, { reset: true });
+  const counts = {};
   for (const [table] of Object.entries(COLUMNS)) {
     let sent = 0;
     for (const rows of chunks(tables[table])) {
       await post(url, token, { table, rows });
       sent += rows.length;
     }
+    counts[table] = sent;
     console.log(`${table}: ${sent} rows`);
   }
-  await post(url, token, { finish: true });
+  await post(url, token, { finish: true, counts });
 
   console.log(`loaded ${pages.length} manuals into ${url}`);
 }
