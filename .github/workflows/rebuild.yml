@@ -5,8 +5,16 @@ name: Rebuild
 #
 # Only the pedals that changed are rewritten (see load.mjs). Trigger, not cron:
 # kyxap1/pedals dispatches this when a manual changes.
+#
+# A dispatch always reads "Manually run by" whoever owns the token, so the
+# dispatcher names the real cause and it becomes the run's title.
+run-name: ${{ inputs.cause || 'Rebuild' }}
 on:
   workflow_dispatch:
+    inputs:
+      cause:
+        description: What triggered this load
+        required: false
 
 # Two loads at once would both rewrite the same pedals. A queued run waits its turn.
 concurrency:

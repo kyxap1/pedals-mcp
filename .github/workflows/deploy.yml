@@ -50,6 +50,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - if: github.event_name == 'push'
-        run: gh workflow run rebuild.yml --repo "$GITHUB_REPOSITORY"
+        run: gh workflow run rebuild.yml --repo "$GITHUB_REPOSITORY" -f cause="Deploy of ${GITHUB_SHA::7}"
         env:
           GH_TOKEN: ${{ github.token }}
