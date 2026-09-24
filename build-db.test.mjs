@@ -65,9 +65,9 @@ for (const [slug, why] of Object.entries(FIXTURES)) {
 
   test(`${slug}: every table resolves to a section`, () => {
     const { sectionRows, tableRows } = buildRows(page);
-    const ids = new Set(sectionRows.map((s) => s.id));
+    const anchors = new Set(sectionRows.map((s) => s.anchor));
     assert.equal(tableRows.length, page.tables.length);
-    for (const t of tableRows) assert.ok(ids.has(t.section_id), `orphan table in ${slug}`);
+    for (const t of tableRows) assert.ok(anchors.has(t.anchor), `orphan table in ${slug}`);
   });
 
   test(`${slug}: anchors survive leaving the page`, () => {

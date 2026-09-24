@@ -39,10 +39,12 @@ Code and data ship on separate triggers, so neither can block the other:
   `wrangler.toml` or the lockfile runs `wrangler deploy`.
 - **`rebuild.yml`** — `workflow_dispatch` only; `kyxap1/pedals` fires it when a
   manual changes. It runs `load.mjs`, which POSTs the rows to the Worker's
-  `/load` route, then `e2e.mjs` against the result. Rows fill `*_new` tables and
-  a final request swaps them in as one transaction, so the tools keep serving the
-  old data until then and a failed load leaves it untouched. The swap is refused
-  (409) unless every staged table holds the row count the loader reports.
+  `/load` route, then `e2e.mjs` against the result. The load is incremental: each
+  pedal row stores a hash of its page plus the builder and schema, and only
+  pedals whose hash changed are rewritten, one request and one D1 transaction
+  each, so readers never see a pedal half-replaced; pedals gone from the repo
+  are deleted. A Worker whose DDL differs from the one D1 was created with
+  recreates the tables empty, and the same load then refills them.
 
 Data travels as values rather than as a SQL file run by `wrangler d1 execute`
 so that **CI never holds a D1 credential**. D1 API tokens cannot be scoped to a

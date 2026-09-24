@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Turns the manuals into dist/pedals.sql: sections, tables, FTS5 rebuild.
+// Turns the manuals into dist/pedals.sql: sections, tables, FTS5 index.
 // Pure — HTML in, one SQL file out. No network, no D1, no wrangler.
 //
 // Usage: node build-db.mjs [repo-root] [out.sql]
@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
-import { DDL, COLUMNS, FTS_REBUILD, SITE } from './schema.mjs';
+import { DDL, COLUMNS, SITE } from './schema.mjs';
 
 export { SITE };
 export const PART_CHARS = 3000; // split target, measured on render
@@ -372,11 +372,9 @@ export function buildRows(page) {
 
     const parts = splitParts(blocks);
     parts.forEach((part, i) => {
-      const id = sectionRows.length + 1;
       const body = part.map((b) => b.body).join('\n\n');
       const render = part.map((b) => b.render).join('\n\n');
       sectionRows.push({
-        id,
         slug: page.slug,
         anchor: s.anchor,
         title: s.title,
@@ -391,7 +389,7 @@ export function buildRows(page) {
         for (const t of b.tables || [])
           tableRows.push({
             slug: page.slug,
-            section_id: id,
+            anchor: s.anchor,
             ord: t.ord,
             caption: t.caption,
             data: JSON.stringify({ headers: t.headers, rows: t.rows }),
@@ -431,14 +429,12 @@ export function tablesOf(pages) {
   const pedal = [];
   const section = [];
   const tbl = [];
-  let sectionOffset = 0;
 
   for (const page of pages) {
     const { sectionRows, tableRows } = buildRows(page);
-    pedal.push([page.slug, page.name, null, null, null, `${SITE}/${page.slug}/`, null]);
+    pedal.push([page.slug, page.name, null, null, null, `${SITE}/${page.slug}/`, null, page.hash ?? null]);
     for (const s of sectionRows)
       section.push([
-        s.id + sectionOffset,
         s.slug,
         s.anchor,
         s.title,
@@ -449,9 +445,7 @@ export function tablesOf(pages) {
         s.body,
         s.render,
       ]);
-    for (const t of tableRows)
-      tbl.push([t.slug, t.section_id + sectionOffset, t.ord, t.caption, t.data]);
-    sectionOffset += sectionRows.length;
+    for (const t of tableRows) tbl.push([t.slug, t.anchor, t.ord, t.caption, t.data]);
   }
   return { pedal, section, tbl };
 }
@@ -461,7 +455,6 @@ export function toSql(pages) {
   const tables = tablesOf(pages);
   for (const [name, columns] of Object.entries(COLUMNS))
     out.push(...batched(name, columns, tables[name].map((row) => `(${row.map(q).join(', ')})`)));
-  out.push(`${FTS_REBUILD};`);
   return out.join('\n\n') + '\n';
 }
 

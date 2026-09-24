@@ -7,7 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from 'agents/mcp/server';
 import { z } from 'zod';
-import { STAGE_STATEMENTS, SWAP_STATEMENTS, COLUMNS, SITE } from '../schema.mjs';
+import { DDL, DDL_STATEMENTS, HASHES_SQL, COLUMNS, SITE } from '../schema.mjs';
 
 const SEARCH_LIMIT = 10;
 const TABLE_LIMIT = 30;
@@ -231,8 +231,7 @@ function createServer(env) {
     async ({ pedal, anchor, index, offset, limit }) => {
       const row = await db
         .prepare(
-          `SELECT t.caption, t.data FROM tbl t JOIN section s ON s.id = t.section_id
-           WHERE t.slug = ?1 AND s.anchor = ?2 AND t.ord = ?3`
+          `SELECT caption, data FROM tbl WHERE slug = ?1 AND anchor = ?2 AND ord = ?3`
         )
         .bind(pedal, anchor, index ?? 1)
         .first();
@@ -271,46 +270,64 @@ function sameToken(a, b) {
 
 const bad = (error) => Response.json({ error }, { status: 400 });
 
-// A load runs as many requests as CI needs to ship the rows. They fill
-// `<table>_new` and `finish` swaps them in as one transaction, so readers keep
-// the old data until then and a load that dies midway leaves it untouched. The
-// next `reset` discards whatever a failed one staged. `finish` swaps only when
-// every staged table holds the row count the loader says it sent.
+// `?put=<slug>` replaces one pedal with the rows in the body, a JSON object
+// `{pedal, section, tbl}` of row arrays in COLUMNS order. The body is bound as
+// one parameter and unpacked by json_each, so the Worker never parses it (Free
+// plan: 10 ms CPU) and the batch stays at six queries (Free plan: 50). The
+// slug column comes from the URL, so a body cannot write outside its pedal.
+const PUT_STATEMENTS = [
+  ...['tbl', 'section', 'pedal'].map((t) => `DELETE FROM ${t} WHERE slug = ?2`),
+  ...Object.entries(COLUMNS).map(
+    ([t, cols]) => `INSERT INTO ${t} (${cols.join(', ')})
+      SELECT ?2, ${cols.slice(1).map((_, i) => `value->>${i + 1}`).join(', ')}
+      FROM json_each(?1, '$.${t}')`
+  ),
+];
+
+// A load is incremental. `init` makes sure the tables match this Worker's DDL —
+// recreating them empty when they do not — and returns the hash each pedal was
+// built from. The loader then `put`s only the pedals whose hash changed and
+// `drop`s the ones gone from the repo. Each is one batch, which D1 runs as a
+// transaction, so readers see a pedal's old rows or its new ones, never a mix.
 async function load(request, env) {
   const auth = request.headers.get('authorization') || '';
   if (!env.DB_WRITE_TOKEN || !sameToken(auth, `Bearer ${env.DB_WRITE_TOKEN}`))
     return Response.json({ error: 'unauthorized' }, { status: 401 });
 
+  const put = new URL(request.url).searchParams.get('put');
+  if (put) {
+    const rows = await request.text();
+    try {
+      await env.DB.batch(PUT_STATEMENTS.map((s) => env.DB.prepare(s).bind(rows, put)));
+    } catch (err) {
+      return bad(err.message);
+    }
+    return Response.json({ ok: true, put });
+  }
+
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') return bad('body must be a JSON object');
 
-  if (body.reset) {
-    await env.DB.batch(STAGE_STATEMENTS.map((s) => env.DB.prepare(s)));
-    return Response.json({ ok: true, reset: true });
+  if (body.init) {
+    // No meta table yet reads as a mismatch too.
+    const live = await env.DB.prepare('SELECT ddl FROM meta').first('ddl').catch(() => null);
+    if (live !== DDL)
+      await env.DB.batch([
+        ...DDL_STATEMENTS.map((s) => env.DB.prepare(s)),
+        env.DB.prepare('INSERT INTO meta (ddl) VALUES (?1)').bind(DDL),
+      ]);
+    const { results } = await env.DB.prepare(HASHES_SQL).all();
+    return Response.json({ hashes: Object.fromEntries(results.map((r) => [r.slug, r.hash])) });
   }
 
-  if (body.finish) {
-    for (const table of Object.keys(COLUMNS)) {
-      const { n } = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}_new`).first();
-      if (n !== body.counts?.[table])
-        return Response.json(
-          { error: `${table}_new holds ${n} rows, expected ${body.counts?.[table]}` },
-          { status: 409 }
-        );
-    }
-    await env.DB.batch(SWAP_STATEMENTS.map((s) => env.DB.prepare(s)));
-    return Response.json({ ok: true, finish: true });
+  if (typeof body.drop === 'string') {
+    await env.DB.batch(
+      Object.keys(COLUMNS).map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE slug = ?1`).bind(body.drop))
+    );
+    return Response.json({ ok: true, drop: body.drop });
   }
 
-  if (!Object.hasOwn(COLUMNS, body.table)) return bad('unknown table');
-  if (!Array.isArray(body.rows) || !body.rows.every(Array.isArray)) return bad('rows must be an array of arrays');
-
-  const columns = COLUMNS[body.table];
-  const sql = `INSERT INTO ${body.table}_new (${columns.join(', ')})
-               VALUES (${columns.map(() => '?').join(', ')})`;
-  const stmt = env.DB.prepare(sql);
-  await env.DB.batch(body.rows.map((r) => stmt.bind(...r)));
-  return Response.json({ ok: true, rows: body.rows.length });
+  return bad('expected init, drop or ?put=<slug>');
 }
 
 // The binding counts per key across the colo; CF-Connecting-IP is set by the

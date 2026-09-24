@@ -36,7 +36,7 @@ const ok = (r, what) => {
 const load = await fetch(`${BASE}/load`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ reset: true }),
+  body: JSON.stringify({ init: true }),
 });
 assert.equal(load.status, 401, '/load accepted an unauthorised request');
 

@@ -3,13 +3,12 @@ name: Rebuild
 # Data only; the Worker is deployed by deploy.yml. Nothing here holds a
 # Cloudflare credential — the rows go to the Worker's /load route over HTTPS.
 #
-# The manuals change at most once a day and a full rebuild writes ~1355 rows,
-# so the D1 free quota (100K writes/day) allows ~73 of these. Trigger, not cron:
+# Only the pedals that changed are rewritten (see load.mjs). Trigger, not cron:
 # kyxap1/pedals dispatches this when a manual changes.
 on:
   workflow_dispatch:
 
-# Two loads at once would share the *_new tables. A queued run waits its turn.
+# Two loads at once would both rewrite the same pedals. A queued run waits its turn.
 concurrency:
   group: rebuild
 
