@@ -4,7 +4,7 @@ name: Rebuild
 # Cloudflare credential — the rows go to the Worker's /load route over HTTPS.
 #
 # Only the pedals that changed are rewritten (see load.mjs). Trigger, not cron:
-# kyxap1/pedals dispatches this when a manual changes.
+# kyxap1/pedals.kyxap.pro dispatches this when a manual changes.
 #
 # A dispatch always reads "Manually run by" whoever owns the token, so the
 # dispatcher names the real cause and it becomes the run's title.
@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # kyxap1/pedals is public, so the cross-repo checkout needs no token.
+      # kyxap1/pedals.kyxap.pro is public, so the cross-repo checkout needs no token.
       - uses: actions/checkout@v7
         with:
-          repository: kyxap1/pedals
+          repository: kyxap1/pedals.kyxap.pro
           path: manuals
 
       - uses: actions/setup-node@v7

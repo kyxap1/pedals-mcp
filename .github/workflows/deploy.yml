@@ -25,10 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # kyxap1/pedals is public, so the cross-repo checkout needs no token.
+      # kyxap1/pedals.kyxap.pro is public, so the cross-repo checkout needs no token.
       - uses: actions/checkout@v7
         with:
-          repository: kyxap1/pedals
+          repository: kyxap1/pedals.kyxap.pro
           path: manuals
 
       - uses: actions/setup-node@v7

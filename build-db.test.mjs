@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parsePage, buildRows, PART_CHARS } from './build-db.mjs';
 
 // The manuals live in their own repository, checked out beside this one in CI.
-const ROOT = process.env.PEDALS_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', 'pedals');
+const ROOT = process.env.PEDALS_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..', 'pedals.kyxap.pro');
 
 // One manual per failure mode the builder exists to survive.
 const FIXTURES = {

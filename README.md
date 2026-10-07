@@ -1,7 +1,7 @@
-# pedals-mcp
+# pedals-mcp.kyxap.pro
 
 Remote MCP server over the pedal manuals published at
-[pedals.kyxap.pro](https://pedals.kyxap.pro) (source: [kyxap1/pedals](https://github.com/kyxap1/pedals)).
+[pedals.kyxap.pro](https://pedals.kyxap.pro) (source: [kyxap1/pedals.kyxap.pro](https://github.com/kyxap1/pedals.kyxap.pro)).
 
 Agents ask it questions instead of loading whole manual files into context.
 
@@ -29,7 +29,7 @@ MCP_URL=http://127.0.0.1:8787 node e2e.mjs   # every tool against a loaded datab
 `wrangler dev` needs glibc: on a musl image npm skips the `workerd` binary.
 
 The tests run against real manuals rather than checked-in fixtures, so they need
-`kyxap1/pedals` checked out — by default as a sibling directory named `pedals`.
+`kyxap1/pedals.kyxap.pro` checked out — by default as a sibling directory named `pedals.kyxap.pro`.
 
 ## Deployment
 
@@ -37,7 +37,7 @@ Code and data ship on separate triggers, so neither can block the other:
 
 - **`deploy.yml`** — a push here that touches `src/`, `schema.mjs`,
   `wrangler.toml` or the lockfile runs `wrangler deploy`.
-- **`rebuild.yml`** — `workflow_dispatch` only; `kyxap1/pedals` fires it when a
+- **`rebuild.yml`** — `workflow_dispatch` only; `kyxap1/pedals.kyxap.pro` fires it when a
   manual changes. It runs `load.mjs`, which POSTs the rows to the Worker's
   `/load` route, then `e2e.mjs` against the result. The load is incremental: each
   pedal row stores a hash of its page plus the builder and schema, and only
@@ -63,4 +63,4 @@ Secrets:
 | this repo | `CLOUDFLARE_API_TOKEN` | Workers: Editor, scoped to the `pedals-mcp` Worker alone |
 | this repo | `DB_WRITE_TOKEN` | shared with the Worker; authorises `/load` |
 | Worker | `DB_WRITE_TOKEN` | the same value, set in Settings → Variables and Secrets |
-| `kyxap1/pedals` | `MCP_DISPATCH_TOKEN` | fine-grained PAT scoped to this repo, Actions: write |
+| `kyxap1/pedals.kyxap.pro` | `MCP_DISPATCH_TOKEN` | fine-grained PAT scoped to this repo, Actions: write |
